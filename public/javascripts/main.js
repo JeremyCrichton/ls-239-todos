@@ -1,23 +1,19 @@
-// Temporary use during development to get around CORS
-const devHost = 'http://localhost:3000';
-let currentId = 0;
+// class Todo {
+//   constructor({ title, dueDate, description }) {
+//     this.id = currentId;
+//     this.title = title;
+//     this.dueDate = dueDate;
+//     this.description = description;
+//   }
+// }
 
-// Responsible for generating new todos
-class Todo {
-  constructor({ title, dueDate, description }) {
-    this.id = currentId;
-    this.title = title;
-    this.dueDate = dueDate;
-    this.description = description;
-  }
-}
+const todoList = {
+  list: []
+};
 
-// Responsible for processing list of todos
-const todoList = {};
+const viewManager = {
+  templates: {},
 
-// Responsible for rendering
-const ui = {
-  templates: [],
   compileTemplates: function() {
     const scripts = document.querySelectorAll(
       'script[type="text/x-handlebars"]'
@@ -32,35 +28,80 @@ const ui = {
         Handlebars.registerPartial(id, template);
       }
 
-      this.templates.push({ id, script: templateScript });
+      this.templates[id] = templateScript;
     });
   },
+
   renderMain: function() {
-    const mainTemplate = this.templates.find(
-      template => template.id === 'main_template'
-    );
-    const html = mainTemplate.script({});
+    const html = this.templates.main_template({});
 
     document.body.innerHTML = html;
   },
-  init: function() {
-    this.compileTemplates();
-    this.renderMain();
-  }
-};
 
-// Responsibile for handling events
-const todoManager = {
-  handleOpenModal: function() {
+  renderTodos: async function() {
+    const todos = await todoManager.getTodos();
+    const todoTable = $('#todo-table');
+    const html = this.templates.list_template({
+      selected: todos
+    });
+
+    todoTable.empty();
+    todoTable.append(html);
+    this.renderHeader('All Todos', todos.length);
+  },
+
+  renderHeader: function(title, data) {
+    const html = viewManager.templates.title_template({
+      current_section: { title, data }
+    });
+
+    $('header').empty();
+    $('header').append(html);
+  },
+
+  clearForm: function() {
+    const title = document.getElementById('title');
+    const description = document.getElementById('description');
+    const day = document.getElementById('due_day');
+    const month = document.getElementById('due_month');
+    const year = document.getElementById('due_year');
+
+    title.value = '';
+    description.value = '';
+    [day, month, year].forEach(input => {
+      input.selectedIndex = 0;
+    });
+  },
+
+  openModal: function() {
     $('#form_modal').fadeIn();
     $('#modal_layer').fadeIn();
   },
-  handleCloseModal: function(e) {
+
+  closeModal: function() {
+    $('#form_modal').fadeOut();
+    $('#modal_layer').fadeOut();
+  },
+
+  init: function() {
+    this.compileTemplates();
+    this.renderMain();
+    this.renderTodos();
+  }
+};
+
+const todoManager = {
+  handleClickAddTodo: function() {
+    viewManager.clearForm();
+    viewManager.openModal();
+  },
+
+  handleClickModalLayer: function(e) {
     if (e.target.id === 'modal_layer') {
-      $('#form_modal').fadeOut();
-      $('#modal_layer').fadeOut();
+      viewManager.closeModal();
     }
   },
+
   getFormData: function() {
     const data = $('form').serializeArray();
     let dataObj = {};
@@ -80,6 +121,7 @@ const todoManager = {
 
     return dataObj;
   },
+
   postData: async function(url, data) {
     const response = await fetch(url, {
       method: 'POST',
@@ -91,13 +133,7 @@ const todoManager = {
 
     return await response.json();
   },
-  delete: async function(id) {
-    const response = await fetch(`/api/todos/${id}`, {
-      method: 'DELETE'
-    });
 
-    return await response;
-  },
   getTodos: async function() {
     try {
       const resp = await fetch('/api/todos');
@@ -106,33 +142,19 @@ const todoManager = {
       console.log('Fetch failed', err);
     }
   },
-  renderHeader: function(title, data) {
-    const titleTemplate = ui.templates.find(
-      template => template.id === 'title_template'
-    );
-    const html = titleTemplate.script({
-      current_section: { title, data }
-    });
 
-    $('header').empty();
-    $('header').append(html);
+  add: async function(data) {
+    try {
+      const response = await this.postData(`/api/todos`, data);
+      viewManager.closeModal();
+      viewManager.renderTodos();
+      return response;
+    } catch (err) {
+      console.log(err);
+    }
   },
-  renderTodos: async function() {
-    const todos = await this.getTodos();
-    const todoTable = $('#todo-table');
-    const numberOFTodos = todos.length;
-    const listTemplate = ui.templates.find(
-      template => template.id === 'list_template'
-    );
-    const html = listTemplate.script({
-      selected: todos
-    });
 
-    todoTable.empty();
-    todoTable.append(html);
-    this.renderHeader('All Todos', numberOFTodos);
-  },
-  handleAddTodo: async function(e) {
+  handleAddTodo: function(e) {
     const data = this.getFormData();
     const title = document.getElementById('title');
 
@@ -141,36 +163,49 @@ const todoManager = {
     if (!title.validity.valid) {
       alert('You must enter a title at least 3 characters long.');
     } else {
-      try {
-        const response = await this.postData(`/api/todos`, data);
-        this.renderTodos();
-      } catch (err) {
-        console.log(err);
-      }
+      this.add(data);
     }
   },
+
+  delete: async function(id) {
+    try {
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'DELETE'
+      });
+      return await response;
+    } catch (err) {
+      console.log(err);
+    }
+  },
+
   handleDeleteTodo: function(e) {
     const item = e.currentTarget.parentNode;
     const itemId = item.dataset.id;
-    this.delete(itemId);
-    this.renderTodos();
+
+    this.delete(itemId).then(() => {
+      viewManager.renderTodos();
+    });
   },
+
   bindEventListeners: function() {
     const addTodoLabel = document.querySelector('label[for="new_item"]');
     const form = document.querySelector('form');
 
-    addTodoLabel.addEventListener('click', this.handleOpenModal.bind(this));
-    document.body.addEventListener('click', this.handleCloseModal.bind(this));
+    addTodoLabel.addEventListener('click', this.handleClickAddTodo.bind(this));
+    document.body.addEventListener(
+      'click',
+      this.handleClickModalLayer.bind(this)
+    );
     form.addEventListener('submit', this.handleAddTodo.bind(this));
     $('body').on('click', '.delete', this.handleDeleteTodo.bind(this));
   },
+
   init: function() {
-    this.renderTodos();
     this.bindEventListeners();
   }
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-  ui.init();
+  viewManager.init();
   todoManager.init();
 });
