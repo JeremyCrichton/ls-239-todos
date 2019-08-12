@@ -1,0 +1,9 @@
+{
+  // "liveServer.settings.host": "localhost",
+  // "liveServer.settings.port": 3001,
+  // "liveServer.settings.proxy": {
+  //   "enable": true, //set it true to enable the feature.
+  //   "baseUri": "/3001", //from where you want to proxy.
+  //   "proxyUri": "http://localhost:3000" //the actual url.
+  // }
+}
