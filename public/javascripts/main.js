@@ -8,11 +8,23 @@
 // }
 
 const todoList = {
-  list: []
+  list: [],
+  saveTodos: function(todos) {
+    this.list = todos;
+  },
+  getTodoById: function(id) {
+    return this.list.find(todo => todo.id === id);
+  }
 };
 
 const viewManager = {
   templates: {},
+
+  title: null,
+  description: null,
+  day: null,
+  month: null,
+  year: null,
 
   compileTemplates: function() {
     const scripts = document.querySelectorAll(
@@ -32,6 +44,14 @@ const viewManager = {
     });
   },
 
+  getElementReferences: function() {
+    this.title = document.getElementById('title');
+    this.description = document.getElementById('description');
+    this.day = document.getElementById('due_day');
+    this.month = document.getElementById('due_month');
+    this.year = document.getElementById('due_year');
+  },
+
   renderMain: function() {
     const html = this.templates.main_template({});
 
@@ -40,10 +60,10 @@ const viewManager = {
 
   renderTodos: async function() {
     const todos = await todoManager.getTodos();
-    const todoTable = $('#todo-table');
     const html = this.templates.list_template({
       selected: todos
     });
+    const todoTable = $('#todo-table');
 
     todoTable.empty();
     todoTable.append(html);
@@ -60,15 +80,9 @@ const viewManager = {
   },
 
   clearForm: function() {
-    const title = document.getElementById('title');
-    const description = document.getElementById('description');
-    const day = document.getElementById('due_day');
-    const month = document.getElementById('due_month');
-    const year = document.getElementById('due_year');
-
-    title.value = '';
-    description.value = '';
-    [day, month, year].forEach(input => {
+    this.title.value = '';
+    this.description.value = '';
+    [this.day, this.month, this.year].forEach(input => {
       input.selectedIndex = 0;
     });
   },
@@ -83,14 +97,32 @@ const viewManager = {
     $('#modal_layer').fadeOut();
   },
 
+  populateForm: function(data) {
+    this.clearForm();
+    this.title.value = data.title;
+    this.description.value = data.description;
+
+    [this.day, this.month, this.year].forEach(input => {
+      const key = input.id.replace('due_', '');
+      if (isNaN(parseInt(data[key], 10))) {
+        input.selectedIndex = 0;
+      } else {
+        input.value = data[key];
+      }
+    });
+  },
+
   init: function() {
     this.compileTemplates();
     this.renderMain();
+    this.getElementReferences();
     this.renderTodos();
   }
 };
 
 const todoManager = {
+  editingId: null,
+
   handleClickAddTodo: function() {
     viewManager.clearForm();
     viewManager.openModal();
@@ -108,23 +140,17 @@ const todoManager = {
 
     data.forEach(el => {
       const key = el.name.replace('due_', '');
-      dataObj[key] = el.value;
+      if (el.value.toLowerCase() !== key) {
+        dataObj[key] = el.value;
+      }
     });
-
-    let { day, month, year } = dataObj;
-
-    if (day === 'Day' || month === 'Month' || year === 'Year') {
-      delete dataObj.day;
-      delete dataObj.month;
-      delete dataObj.year;
-    }
 
     return dataObj;
   },
 
-  postData: async function(url, data) {
+  postData: async function(url, method, data) {
     const response = await fetch(url, {
-      method: 'POST',
+      method,
       headers: {
         'Content-type': 'application/json'
       },
@@ -134,10 +160,22 @@ const todoManager = {
     return await response.json();
   },
 
+  // getTodo: async function(id) {
+  //   try {
+  //     const resp = await fetch(`/api/todos/${id}`);
+  //     const json = await resp.json();
+  //     return json;
+  //   } catch (err) {
+  //     console.log('Fetch failed', err);
+  //   }
+  // },
+
   getTodos: async function() {
     try {
       const resp = await fetch('/api/todos');
-      return await resp.json();
+      const json = await resp.json();
+      todoList.saveTodos(json);
+      return json;
     } catch (err) {
       console.log('Fetch failed', err);
     }
@@ -145,7 +183,7 @@ const todoManager = {
 
   add: async function(data) {
     try {
-      const response = await this.postData(`/api/todos`, data);
+      const response = await this.postData(`/api/todos`, 'POST', data);
       viewManager.closeModal();
       viewManager.renderTodos();
       return response;
@@ -154,7 +192,7 @@ const todoManager = {
     }
   },
 
-  handleAddTodo: function(e) {
+  handleSubmitForm: function(e) {
     const data = this.getFormData();
     const title = document.getElementById('title');
 
@@ -163,7 +201,11 @@ const todoManager = {
     if (!title.validity.valid) {
       alert('You must enter a title at least 3 characters long.');
     } else {
-      this.add(data);
+      if (!this.editingId) {
+        this.add(data);
+      } else {
+        this.update(this.editingId, data);
+      }
     }
   },
 
@@ -187,6 +229,30 @@ const todoManager = {
     });
   },
 
+  update: async function(id, data) {
+    try {
+      const response = await this.postData(`/api/todos/${id}`, 'PUT', data);
+      viewManager.closeModal();
+      viewManager.renderTodos();
+      this.editingId = null;
+      console.log(response);
+      return response;
+    } catch (err) {
+      console.log(err);
+    }
+  },
+
+  handleEditTodo: function(e) {
+    e.preventDefault();
+    viewManager.openModal();
+    const item = e.currentTarget.parentNode.parentNode;
+    const itemId = parseInt(item.dataset.id, 10);
+    const todo = todoList.getTodoById(itemId);
+
+    viewManager.populateForm(todo);
+    this.editingId = itemId;
+  },
+
   bindEventListeners: function() {
     const addTodoLabel = document.querySelector('label[for="new_item"]');
     const form = document.querySelector('form');
@@ -196,8 +262,10 @@ const todoManager = {
       'click',
       this.handleClickModalLayer.bind(this)
     );
-    form.addEventListener('submit', this.handleAddTodo.bind(this));
+    // form.addEventListener('submit', this.handleAddTodo.bind(this));
+    form.addEventListener('submit', this.handleSubmitForm.bind(this));
     $('body').on('click', '.delete', this.handleDeleteTodo.bind(this));
+    $('#todo-table').on('click', 'label', this.handleEditTodo.bind(this));
   },
 
   init: function() {
