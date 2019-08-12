@@ -91,16 +91,46 @@ const todoManager = {
 
     return await response.json();
   },
+  delete: async function(id) {
+    const response = await fetch(`/api/todos/${id}`, {
+      method: 'DELETE'
+    });
+
+    return await response;
+  },
   getTodos: async function() {
     try {
       const resp = await fetch('/api/todos');
-      console.log(await resp.json());
+      return await resp.json();
     } catch (err) {
       console.log('Fetch failed', err);
     }
   },
-  renderTodos: function() {
-    this.getTodos();
+  renderHeader: function(title, data) {
+    const titleTemplate = ui.templates.find(
+      template => template.id === 'title_template'
+    );
+    const html = titleTemplate.script({
+      current_section: { title, data }
+    });
+
+    $('header').empty();
+    $('header').append(html);
+  },
+  renderTodos: async function() {
+    const todos = await this.getTodos();
+    const todoTable = $('#todo-table');
+    const numberOFTodos = todos.length;
+    const listTemplate = ui.templates.find(
+      template => template.id === 'list_template'
+    );
+    const html = listTemplate.script({
+      selected: todos
+    });
+
+    todoTable.empty();
+    todoTable.append(html);
+    this.renderHeader('All Todos', numberOFTodos);
   },
   handleAddTodo: async function(e) {
     const data = this.getFormData();
@@ -113,11 +143,17 @@ const todoManager = {
     } else {
       try {
         const response = await this.postData(`/api/todos`, data);
-        console.log(response);
+        this.renderTodos();
       } catch (err) {
         console.log(err);
       }
     }
+  },
+  handleDeleteTodo: function(e) {
+    const item = e.currentTarget.parentNode;
+    const itemId = item.dataset.id;
+    this.delete(itemId);
+    this.renderTodos();
   },
   bindEventListeners: function() {
     const addTodoLabel = document.querySelector('label[for="new_item"]');
@@ -126,10 +162,11 @@ const todoManager = {
     addTodoLabel.addEventListener('click', this.handleOpenModal.bind(this));
     document.body.addEventListener('click', this.handleCloseModal.bind(this));
     form.addEventListener('submit', this.handleAddTodo.bind(this));
+    $('body').on('click', '.delete', this.handleDeleteTodo.bind(this));
   },
   init: function() {
-    this.bindEventListeners();
     this.renderTodos();
+    this.bindEventListeners();
   }
 };
 
@@ -137,12 +174,3 @@ document.addEventListener('DOMContentLoaded', function() {
   ui.init();
   todoManager.init();
 });
-
-// Test
-// document.addEventListener('DOMContentLoaded', function() {
-// const getTodos = async () => {
-//   const data = await fetch(`${devHost}/api/todos`);
-//   console.log('todos', await data.json());
-// };
-//   getTodos();
-// });
