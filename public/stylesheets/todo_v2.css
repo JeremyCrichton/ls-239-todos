@@ -219,6 +219,7 @@ table .list_item {
 
 table .list_item .check {
   background: transparent url('../images/checkbox.png') no-repeat;
+  cursor: pointer;
   position: absolute;
   top: 18px;
   left: 15px;

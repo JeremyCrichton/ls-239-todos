@@ -90,7 +90,7 @@
                           <option value="31">31</option>
                         </select>  /
                         <select id="due_month" name="due_month">
-                          <option>Month</option>
+                          <option value="00">Month</option>
                           <option value="01">January</option>
                           <option value="02">February</option>
                           <option value="03">March</option>
@@ -105,7 +105,7 @@
                           <option value="12">December</option>
                         </select> /
                         <select id="due_year" name="due_year" placeholder="year">
-                          <option>Year</option>
+                          <option value="0000">Year</option>
                           <option>2014</option>
                           <option>2015</option>
                           <option>2016</option>
@@ -127,7 +127,7 @@
                     </li>
                     <li>
                       <input type="submit" value="Save" />
-                      <button name="complete">Mark As Complete</button>
+                      <button id="complete-btn" type="button" name="complete">Mark As Complete</button>
                     </li>
                   </ul>
                 </fieldset>

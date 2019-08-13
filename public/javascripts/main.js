@@ -58,16 +58,85 @@ const viewManager = {
     document.body.innerHTML = html;
   },
 
-  renderTodos: async function() {
-    const todos = await todoManager.getTodos();
-    const html = this.templates.list_template({
-      selected: todos
+  addDueDate: function(todos) {
+    return todos.map(todo => {
+      todo.due_date =
+        parseInt(todo.year, 10) && parseInt(todo.month, 10)
+          ? `${todo.month}/${todo.year}`
+          : 'No Due Date';
+      return todo;
     });
+  },
+
+  orderByCompleted: function(todos) {
+    const completed = [];
+    const notCompleted = [];
+
+    todos.forEach(todo => {
+      todo.completed ? completed.push(todo) : notCompleted.push(todo);
+    });
+
+    return notCompleted.concat(completed);
+  },
+
+  orderByDate: function(todos) {
+    return todos.sort(function(a, b) {
+      if (a.year > b.year) {
+        return 1;
+      }
+      if (a.year < b.year) {
+        return -1;
+      }
+      if (a.month > b.month) {
+        return 1;
+      }
+      if (a.month < b.month) {
+        return -1;
+      }
+    });
+  },
+
+  groupTodos: function(todos) {
+    const todosWithDueDate = this.addDueDate(todos);
+    const ordered = this.orderByDate(todosWithDueDate);
+    const grouped = {};
+
+    ordered.forEach(todo => {
+      const dueDate = todo.due_date;
+      if (Object.keys(grouped).includes(dueDate)) {
+        grouped[dueDate].push(todo);
+      } else {
+        grouped[dueDate] = [todo];
+      }
+    });
+
+    return grouped;
+  },
+
+  getCompletedTodos: function(todos) {
+    return todos.filter(todo => todo.completed === true);
+  },
+
+  renderAll: async function() {
+    const todos = await todoManager.getTodos();
+    this.renderTodos(todos);
+    this.renderHeader('All Todos', todos.length);
+    this.renderAllTodosList(todos);
+    this.renderCompletedTodosList(todos);
+  },
+
+  renderTodos: function(todos) {
     const todoTable = $('#todo-table');
+    const todosWithDueDate = this.addDueDate(todos);
+    const ordered = this.orderByDate(todosWithDueDate);
+    const todosOrderedByCompleted = this.orderByCompleted(ordered);
+
+    const html = this.templates.list_template({
+      selected: todosOrderedByCompleted
+    });
 
     todoTable.empty();
     todoTable.append(html);
-    this.renderHeader('All Todos', todos.length);
   },
 
   renderHeader: function(title, data) {
@@ -75,8 +144,39 @@ const viewManager = {
       current_section: { title, data }
     });
 
-    $('header').empty();
-    $('header').append(html);
+    $('#items > header').empty();
+    $('#items > header').append(html);
+  },
+
+  renderAllTodosList: function(todos) {
+    const headerHtml = viewManager.templates.all_todos_template({
+      todos
+    });
+    const todosByDate = this.groupTodos(todos);
+    const listHtml = viewManager.templates.all_list_template({
+      todos_by_date: todosByDate
+    });
+
+    $('#all_todos').empty();
+    $('#all_todos').append(headerHtml);
+    $('#all_lists').empty();
+    $('#all_lists').append(listHtml);
+  },
+
+  renderCompletedTodosList: function(todos) {
+    const completed = this.getCompletedTodos(todos);
+    const todosByDate = this.groupTodos(completed);
+    const headerHtml = viewManager.templates.completed_todos_template({
+      done: completed
+    });
+    const listHtml = viewManager.templates.completed_list_template({
+      done_todos_by_date: todosByDate
+    });
+
+    $('#completed_todos').empty();
+    $('#completed_todos').append(headerHtml);
+    $('#completed_lists').empty();
+    $('#completed_lists').append(listHtml);
   },
 
   clearForm: function() {
@@ -116,7 +216,7 @@ const viewManager = {
     this.compileTemplates();
     this.renderMain();
     this.getElementReferences();
-    this.renderTodos();
+    this.renderAll();
   }
 };
 
@@ -128,7 +228,7 @@ const todoManager = {
     viewManager.openModal();
   },
 
-  handleClickModalLayer: function(e) {
+  handleCloseModal: function(e) {
     if (e.target.id === 'modal_layer') {
       viewManager.closeModal();
     }
@@ -142,6 +242,8 @@ const todoManager = {
       const key = el.name.replace('due_', '');
       if (el.value.toLowerCase() !== key) {
         dataObj[key] = el.value;
+      } else {
+        dataObj[key] = '';
       }
     });
 
@@ -185,7 +287,7 @@ const todoManager = {
     try {
       const response = await this.postData(`/api/todos`, 'POST', data);
       viewManager.closeModal();
-      viewManager.renderTodos();
+      viewManager.renderAll();
       return response;
     } catch (err) {
       console.log(err);
@@ -225,7 +327,7 @@ const todoManager = {
     const itemId = item.dataset.id;
 
     this.delete(itemId).then(() => {
-      viewManager.renderTodos();
+      viewManager.renderAll();
     });
   },
 
@@ -235,37 +337,55 @@ const todoManager = {
       viewManager.closeModal();
       viewManager.renderTodos();
       this.editingId = null;
-      console.log(response);
       return response;
     } catch (err) {
       console.log(err);
     }
   },
 
+  getIdFromTodoElement: function(e) {
+    const item = e.currentTarget.parentNode.parentNode;
+    return parseInt(item.dataset.id, 10);
+  },
+
   handleEditTodo: function(e) {
     e.preventDefault();
     viewManager.openModal();
-    const item = e.currentTarget.parentNode.parentNode;
-    const itemId = parseInt(item.dataset.id, 10);
+    const itemId = this.getIdFromTodoElement(e);
     const todo = todoList.getTodoById(itemId);
 
     viewManager.populateForm(todo);
     this.editingId = itemId;
   },
 
+  handleComplete: function(e) {
+    if (!this.editingId) {
+      alert('You have to add the todo before you complete it :D');
+    } else {
+      this.update(this.editingId, { completed: true });
+    }
+  },
+
+  handleToggleComplete: function(e) {
+    const id = this.getIdFromTodoElement(e);
+    const checked = e.target.previousElementSibling.checked;
+
+    this.update(id, { completed: !checked });
+  },
+
   bindEventListeners: function() {
     const addTodoLabel = document.querySelector('label[for="new_item"]');
     const form = document.querySelector('form');
+    const completeBtn = document.getElementById('complete-btn');
+    const $todoTable = $('#todo-table');
 
     addTodoLabel.addEventListener('click', this.handleClickAddTodo.bind(this));
-    document.body.addEventListener(
-      'click',
-      this.handleClickModalLayer.bind(this)
-    );
-    // form.addEventListener('submit', this.handleAddTodo.bind(this));
+    document.body.addEventListener('click', this.handleCloseModal.bind(this));
     form.addEventListener('submit', this.handleSubmitForm.bind(this));
     $('body').on('click', '.delete', this.handleDeleteTodo.bind(this));
-    $('#todo-table').on('click', 'label', this.handleEditTodo.bind(this));
+    $todoTable.on('click', 'label', this.handleEditTodo.bind(this));
+    $todoTable.on('click', '.check', this.handleToggleComplete.bind(this));
+    completeBtn.addEventListener('click', this.handleComplete.bind(this));
   },
 
   init: function() {
