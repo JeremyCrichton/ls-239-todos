@@ -52,6 +52,39 @@ const viewManager = {
     this.year = document.getElementById('due_year');
   },
 
+  clearForm: function() {
+    this.title.value = '';
+    this.description.value = '';
+    [this.day, this.month, this.year].forEach(input => {
+      input.selectedIndex = 0;
+    });
+  },
+
+  openModal: function() {
+    $('#form_modal').fadeIn();
+    $('#modal_layer').fadeIn();
+  },
+
+  closeModal: function() {
+    $('#form_modal').fadeOut();
+    $('#modal_layer').fadeOut();
+  },
+
+  populateForm: function(data) {
+    this.clearForm();
+    this.title.value = data.title;
+    this.description.value = data.description;
+
+    [this.day, this.month, this.year].forEach(input => {
+      const key = input.id.replace('due_', '');
+      if (isNaN(parseInt(data[key], 10))) {
+        input.selectedIndex = 0;
+      } else {
+        input.value = data[key];
+      }
+    });
+  },
+
   renderMain: function() {
     const html = this.templates.main_template({});
 
@@ -119,6 +152,7 @@ const viewManager = {
 
   renderAll: async function() {
     const todos = await todoManager.getTodos();
+
     this.renderTodos(todos);
     this.renderHeader('All Todos', todos.length);
     this.renderAllTodosList(todos);
@@ -137,6 +171,34 @@ const viewManager = {
 
     todoTable.empty();
     todoTable.append(html);
+  },
+
+  renderAllTodos: async function() {
+    const todos = await todoManager.getTodos();
+
+    this.renderTodos(todos);
+  },
+
+  renderAllByDate: async function(date) {
+    const todos = await todoManager.getTodos();
+    const grouped = this.groupTodos(todos);
+
+    this.renderTodos(grouped[date]);
+  },
+
+  renderCompletedTodos: async function() {
+    const todos = await todoManager.getTodos();
+    const completed = this.getCompletedTodos(todos);
+
+    this.renderTodos(completed);
+  },
+
+  renderCompletedByDate: async function(date) {
+    const todos = await todoManager.getTodos();
+    const completed = this.getCompletedTodos(todos);
+    const grouped = this.groupTodos(completed);
+
+    this.renderTodos(grouped[date]);
   },
 
   renderHeader: function(title, data) {
@@ -177,39 +239,6 @@ const viewManager = {
     $('#completed_todos').append(headerHtml);
     $('#completed_lists').empty();
     $('#completed_lists').append(listHtml);
-  },
-
-  clearForm: function() {
-    this.title.value = '';
-    this.description.value = '';
-    [this.day, this.month, this.year].forEach(input => {
-      input.selectedIndex = 0;
-    });
-  },
-
-  openModal: function() {
-    $('#form_modal').fadeIn();
-    $('#modal_layer').fadeIn();
-  },
-
-  closeModal: function() {
-    $('#form_modal').fadeOut();
-    $('#modal_layer').fadeOut();
-  },
-
-  populateForm: function(data) {
-    this.clearForm();
-    this.title.value = data.title;
-    this.description.value = data.description;
-
-    [this.day, this.month, this.year].forEach(input => {
-      const key = input.id.replace('due_', '');
-      if (isNaN(parseInt(data[key], 10))) {
-        input.selectedIndex = 0;
-      } else {
-        input.value = data[key];
-      }
-    });
   },
 
   init: function() {
@@ -335,7 +364,7 @@ const todoManager = {
     try {
       const response = await this.postData(`/api/todos/${id}`, 'PUT', data);
       viewManager.closeModal();
-      viewManager.renderTodos();
+      viewManager.renderAll();
       this.editingId = null;
       return response;
     } catch (err) {
@@ -344,6 +373,7 @@ const todoManager = {
   },
 
   getIdFromTodoElement: function(e) {
+    // Delete?
     const item = e.currentTarget.parentNode.parentNode;
     return parseInt(item.dataset.id, 10);
   },
@@ -367,10 +397,32 @@ const todoManager = {
   },
 
   handleToggleComplete: function(e) {
-    const id = this.getIdFromTodoElement(e);
-    const checked = e.target.previousElementSibling.checked;
+    const id = parseInt(e.currentTarget.parentNode.dataset.id, 10);
+    const checked = $(e.currentTarget)
+      .children()
+      .filter('input')
+      .is(':checked');
+    console.log(checked);
 
     this.update(id, { completed: !checked });
+  },
+
+  handleRenderCompleted: function(e) {
+    viewManager.renderCompletedTodos();
+  },
+
+  handleRenderAll: function(e) {
+    viewManager.renderAllTodos();
+  },
+
+  handleRenderAllByDate: function(e) {
+    const date = e.currentTarget.dataset.title;
+    viewManager.renderAllByDate(date);
+  },
+
+  handleRenderCompletedByDate: function(e) {
+    const date = e.currentTarget.dataset.title;
+    viewManager.renderCompletedByDate(date);
   },
 
   bindEventListeners: function() {
@@ -384,8 +436,19 @@ const todoManager = {
     form.addEventListener('submit', this.handleSubmitForm.bind(this));
     $('body').on('click', '.delete', this.handleDeleteTodo.bind(this));
     $todoTable.on('click', 'label', this.handleEditTodo.bind(this));
-    $todoTable.on('click', '.check', this.handleToggleComplete.bind(this));
+    $todoTable.on('click', '.list_item', this.handleToggleComplete.bind(this));
+    $todoTable.on('click', 'label', function(e) {
+      e.stopPropagation();
+    });
     completeBtn.addEventListener('click', this.handleComplete.bind(this));
+    $('#completed_todos').on('click', this.handleRenderCompleted.bind(this));
+    $('#all_todos').on('click', this.handleRenderAll.bind(this));
+    $('#all_lists').on('click', 'dl', this.handleRenderAllByDate.bind(this));
+    $('#completed_lists').on(
+      'click',
+      'dl',
+      this.handleRenderCompletedByDate.bind(this)
+    );
   },
 
   init: function() {
