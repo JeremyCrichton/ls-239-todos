@@ -1,22 +1,3 @@
-// class Todo {
-//   constructor({ title, dueDate, description }) {
-//     this.id = currentId;
-//     this.title = title;
-//     this.dueDate = dueDate;
-//     this.description = description;
-//   }
-// }
-
-const todoList = {
-  list: [],
-  saveTodos: function(todos) {
-    this.list = todos;
-  },
-  getTodoById: function(id) {
-    return this.list.find(todo => todo.id === id);
-  }
-};
-
 const viewManager = {
   templates: {},
   currentlyRendering: 'all',
@@ -158,9 +139,7 @@ const viewManager = {
     return todos.filter(todo => todo.completed === true);
   },
 
-  renderAll: async function() {
-    const todos = await todoManager.getTodos();
-
+  renderAll: function() {
     if (this.currentlyRendering === 'all' && this.currentlyRenderingDate) {
       this.renderAllByDate(this.currentlyRenderingDate);
     } else if (
@@ -174,8 +153,8 @@ const viewManager = {
       this.renderAllTodos();
     }
 
-    this.renderAllTodosList(todos);
-    this.renderCompletedTodosList(todos);
+    this.renderAllTodosList();
+    this.renderCompletedTodosList();
   },
 
   renderTodos: function(todos, headerTitle) {
@@ -230,7 +209,8 @@ const viewManager = {
     $('#items > header').append(html);
   },
 
-  renderAllTodosList: function(todos) {
+  renderAllTodosList: async function() {
+    const todos = await todoManager.getTodos();
     const headerHtml = viewManager.templates.all_todos_template({
       todos
     });
@@ -245,7 +225,8 @@ const viewManager = {
     $('#all_lists').append(listHtml);
   },
 
-  renderCompletedTodosList: function(todos) {
+  renderCompletedTodosList: async function() {
+    const todos = await todoManager.getTodos();
     const completed = this.getCompletedTodos(todos);
     const todosByDate = this.groupTodos(completed);
     const headerHtml = viewManager.templates.completed_todos_template({
@@ -272,15 +253,9 @@ const viewManager = {
 const todoManager = {
   editingId: null,
 
-  handleClickAddTodo: function() {
-    viewManager.clearForm();
-    viewManager.openModal();
-  },
-
-  handleCloseModal: function(e) {
-    if (e.target.id === 'modal_layer') {
-      viewManager.closeModal();
-    }
+  getIdFromTodoElement: function(e) {
+    const item = e.currentTarget.parentNode.parentNode;
+    return parseInt(item.dataset.id, 10);
   },
 
   getFormData: function() {
@@ -311,11 +286,22 @@ const todoManager = {
     return await response.json();
   },
 
+  getTodo: async function(id) {
+    try {
+      const resp = await fetch(`/api/todos/${id}`);
+      const json = await resp.json();
+
+      return json;
+    } catch (err) {
+      console.log('Fetch failed', err);
+    }
+  },
+
   getTodos: async function() {
     try {
       const resp = await fetch('/api/todos');
       const json = await resp.json();
-      todoList.saveTodos(json);
+
       return json;
     } catch (err) {
       console.log('Fetch failed', err);
@@ -330,6 +316,29 @@ const todoManager = {
       viewManager.currentlyRenderingDate = null;
       viewManager.renderAll();
       return response;
+    } catch (err) {
+      console.log(err);
+    }
+  },
+
+  update: async function(id, data) {
+    try {
+      const response = await this.postData(`/api/todos/${id}`, 'PUT', data);
+      viewManager.closeModal();
+      viewManager.renderAll();
+      this.editingId = null;
+      return response;
+    } catch (err) {
+      console.log(err);
+    }
+  },
+
+  delete: async function(id) {
+    try {
+      const response = await fetch(`/api/todos/${id}`, {
+        method: 'DELETE'
+      });
+      return await response;
     } catch (err) {
       console.log(err);
     }
@@ -352,50 +361,36 @@ const todoManager = {
     }
   },
 
-  delete: async function(id) {
-    try {
-      const response = await fetch(`/api/todos/${id}`, {
-        method: 'DELETE'
-      });
-      return await response;
-    } catch (err) {
-      console.log(err);
-    }
-  },
-
   handleDeleteTodo: function(e) {
     const item = e.currentTarget.parentNode;
     const itemId = item.dataset.id;
+
+    e.stopPropagation();
 
     this.delete(itemId).then(() => {
       viewManager.renderAll();
     });
   },
 
-  update: async function(id, data) {
-    try {
-      const response = await this.postData(`/api/todos/${id}`, 'PUT', data);
+  handleClickAddTodo: function() {
+    viewManager.clearForm();
+    viewManager.openModal();
+  },
+
+  handleCloseModal: function(e) {
+    if (e.target.id === 'modal_layer') {
       viewManager.closeModal();
-      viewManager.renderAll();
-      this.editingId = null;
-      return response;
-    } catch (err) {
-      console.log(err);
     }
   },
 
-  getIdFromTodoElement: function(e) {
-    // Delete?
-    const item = e.currentTarget.parentNode.parentNode;
-    return parseInt(item.dataset.id, 10);
-  },
-
-  handleEditTodo: function(e) {
+  handleEditTodo: async function(e) {
     e.preventDefault();
-    viewManager.openModal();
-    const itemId = this.getIdFromTodoElement(e);
-    const todo = todoList.getTodoById(itemId);
+    e.stopPropagation();
 
+    const itemId = this.getIdFromTodoElement(e);
+    const todo = await this.getTodo(itemId);
+
+    viewManager.openModal();
     viewManager.populateForm(todo);
     this.editingId = itemId;
   },
@@ -446,6 +441,12 @@ const todoManager = {
     viewManager.renderCompletedByDate(date);
   },
 
+  handleKeyPress: function(e) {
+    if (this.editingId && e.key === 'Escape') {
+      viewManager.closeModal();
+    }
+  },
+
   bindEventListeners: function() {
     const addTodoLabel = document.querySelector('label[for="new_item"]');
     const form = document.querySelector('form');
@@ -455,12 +456,9 @@ const todoManager = {
     addTodoLabel.addEventListener('click', this.handleClickAddTodo.bind(this));
     document.body.addEventListener('click', this.handleCloseModal.bind(this));
     form.addEventListener('submit', this.handleSubmitForm.bind(this));
-    $('body').on('click', '.delete', this.handleDeleteTodo.bind(this));
+    $todoTable.on('click', '.delete', this.handleDeleteTodo.bind(this));
     $todoTable.on('click', 'label', this.handleEditTodo.bind(this));
     $todoTable.on('click', '.list_item', this.handleToggleComplete.bind(this));
-    $todoTable.on('click', 'label', function(e) {
-      e.stopPropagation();
-    });
     completeBtn.addEventListener('click', this.handleComplete.bind(this));
     $('#completed_todos').on('click', this.handleRenderCompleted.bind(this));
     $('#all_todos').on('click', this.handleRenderAll.bind(this));
@@ -470,6 +468,7 @@ const todoManager = {
       'dl',
       this.handleRenderCompletedByDate.bind(this)
     );
+    $(document).on('keydown', this.handleKeyPress.bind(this));
   },
 
   init: function() {
