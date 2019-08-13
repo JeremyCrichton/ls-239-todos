@@ -19,6 +19,8 @@ const todoList = {
 
 const viewManager = {
   templates: {},
+  currentlyRendering: 'all',
+  currentlyRenderingDate: null,
 
   title: null,
   description: null,
@@ -153,7 +155,19 @@ const viewManager = {
   renderAll: async function() {
     const todos = await todoManager.getTodos();
 
-    this.renderTodos(todos);
+    if (this.currentlyRendering === 'all' && this.currentlyRenderingDate) {
+      this.renderAllByDate(this.currentlyRenderingDate);
+    } else if (
+      this.currentlyRendering === 'completed' &&
+      this.currentlyRenderingDate
+    ) {
+      this.renderCompletedByDate(this.currentlyRenderingDate);
+    } else if (this.currentlyRendering === 'completed') {
+      this.renderCompletedTodos();
+    } else {
+      this.renderAllTodos();
+    }
+
     this.renderHeader('All Todos', todos.length);
     this.renderAllTodosList(todos);
     this.renderCompletedTodosList(todos);
@@ -407,21 +421,31 @@ const todoManager = {
     this.update(id, { completed: !checked });
   },
 
-  handleRenderCompleted: function(e) {
-    viewManager.renderCompletedTodos();
+  handleRenderAll: function(e) {
+    viewManager.currentlyRendering = 'all';
+    viewManager.currentlyRenderingDate = null;
+    viewManager.renderAllTodos();
   },
 
-  handleRenderAll: function(e) {
-    viewManager.renderAllTodos();
+  handleRenderCompleted: function(e) {
+    viewManager.currentlyRendering = 'completed';
+    viewManager.currentlyRenderingDate = null;
+    viewManager.renderCompletedTodos();
   },
 
   handleRenderAllByDate: function(e) {
     const date = e.currentTarget.dataset.title;
+
+    viewManager.currentlyRendering = 'all';
+    viewManager.currentlyRenderingDate = date;
     viewManager.renderAllByDate(date);
   },
 
   handleRenderCompletedByDate: function(e) {
     const date = e.currentTarget.dataset.title;
+
+    viewManager.currentlyRendering = 'completed';
+    viewManager.currentlyRenderingDate = date;
     viewManager.renderCompletedByDate(date);
   },
 
