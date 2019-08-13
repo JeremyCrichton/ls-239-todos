@@ -94,41 +94,47 @@ const viewManager = {
   },
 
   addDueDate: function(todos) {
-    return todos.map(todo => {
-      todo.due_date =
-        parseInt(todo.year, 10) && parseInt(todo.month, 10)
-          ? `${todo.month}/${todo.year}`
-          : 'No Due Date';
-      return todo;
-    });
+    if (todos) {
+      return todos.map(todo => {
+        todo.due_date =
+          parseInt(todo.year, 10) && parseInt(todo.month, 10)
+            ? `${todo.month}/${todo.year}`
+            : 'No Due Date';
+        return todo;
+      });
+    }
   },
 
   orderByCompleted: function(todos) {
     const completed = [];
     const notCompleted = [];
 
-    todos.forEach(todo => {
-      todo.completed ? completed.push(todo) : notCompleted.push(todo);
-    });
+    if (todos) {
+      todos.forEach(todo => {
+        todo.completed ? completed.push(todo) : notCompleted.push(todo);
+      });
 
-    return notCompleted.concat(completed);
+      return notCompleted.concat(completed);
+    }
   },
 
   orderByDate: function(todos) {
-    return todos.sort(function(a, b) {
-      if (a.year > b.year) {
-        return 1;
-      }
-      if (a.year < b.year) {
-        return -1;
-      }
-      if (a.month > b.month) {
-        return 1;
-      }
-      if (a.month < b.month) {
-        return -1;
-      }
-    });
+    if (todos) {
+      return todos.sort(function(a, b) {
+        if (a.year > b.year) {
+          return 1;
+        }
+        if (a.year < b.year) {
+          return -1;
+        }
+        if (a.month > b.month) {
+          return 1;
+        }
+        if (a.month < b.month) {
+          return -1;
+        }
+      });
+    }
   },
 
   groupTodos: function(todos) {
@@ -168,12 +174,11 @@ const viewManager = {
       this.renderAllTodos();
     }
 
-    this.renderHeader('All Todos', todos.length);
     this.renderAllTodosList(todos);
     this.renderCompletedTodosList(todos);
   },
 
-  renderTodos: function(todos) {
+  renderTodos: function(todos, headerTitle) {
     const todoTable = $('#todo-table');
     const todosWithDueDate = this.addDueDate(todos);
     const ordered = this.orderByDate(todosWithDueDate);
@@ -183,6 +188,7 @@ const viewManager = {
       selected: todosOrderedByCompleted
     });
 
+    todos && this.renderHeader(headerTitle, todos.length);
     todoTable.empty();
     todoTable.append(html);
   },
@@ -190,21 +196,21 @@ const viewManager = {
   renderAllTodos: async function() {
     const todos = await todoManager.getTodos();
 
-    this.renderTodos(todos);
+    this.renderTodos(todos, 'All Todos');
   },
 
   renderAllByDate: async function(date) {
     const todos = await todoManager.getTodos();
     const grouped = this.groupTodos(todos);
 
-    this.renderTodos(grouped[date]);
+    this.renderTodos(grouped[date], date);
   },
 
   renderCompletedTodos: async function() {
     const todos = await todoManager.getTodos();
     const completed = this.getCompletedTodos(todos);
 
-    this.renderTodos(completed);
+    this.renderTodos(completed, 'Completed');
   },
 
   renderCompletedByDate: async function(date) {
@@ -212,7 +218,7 @@ const viewManager = {
     const completed = this.getCompletedTodos(todos);
     const grouped = this.groupTodos(completed);
 
-    this.renderTodos(grouped[date]);
+    this.renderTodos(grouped[date], `Completed - ${date}`);
   },
 
   renderHeader: function(title, data) {
@@ -305,16 +311,6 @@ const todoManager = {
     return await response.json();
   },
 
-  // getTodo: async function(id) {
-  //   try {
-  //     const resp = await fetch(`/api/todos/${id}`);
-  //     const json = await resp.json();
-  //     return json;
-  //   } catch (err) {
-  //     console.log('Fetch failed', err);
-  //   }
-  // },
-
   getTodos: async function() {
     try {
       const resp = await fetch('/api/todos');
@@ -330,6 +326,8 @@ const todoManager = {
     try {
       const response = await this.postData(`/api/todos`, 'POST', data);
       viewManager.closeModal();
+      viewManager.currentlyRendering = 'all';
+      viewManager.currentlyRenderingDate = null;
       viewManager.renderAll();
       return response;
     } catch (err) {
@@ -416,7 +414,6 @@ const todoManager = {
       .children()
       .filter('input')
       .is(':checked');
-    console.log(checked);
 
     this.update(id, { completed: !checked });
   },
