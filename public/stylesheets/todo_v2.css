@@ -358,3 +358,7 @@ input[type='checkbox'] + section {
     display: block;
   }
 }
+
+.red {
+  color: red;
+}

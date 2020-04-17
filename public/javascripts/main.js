@@ -79,7 +79,7 @@ const viewManager = {
       return todos.map(todo => {
         todo.due_date =
           parseInt(todo.year, 10) && parseInt(todo.month, 10)
-            ? `${todo.month}/${todo.year}`
+            ? `${todo.month}/${todo.year.slice(2, 4)}`
             : 'No Due Date';
         return todo;
       });
@@ -152,9 +152,6 @@ const viewManager = {
     } else {
       this.renderAllTodos();
     }
-
-    this.renderAllTodosList();
-    this.renderCompletedTodosList();
   },
 
   renderTodos: function(todos, headerTitle) {
@@ -167,21 +164,27 @@ const viewManager = {
       selected: todosOrderedByCompleted
     });
 
-    todos && this.renderHeader(headerTitle, todos.length);
     todoTable.empty();
     todoTable.append(html);
+    this.renderHeader(headerTitle, todos ? todos.length : 0);
+  },
+
+  addActiveClass: function(selector) {
+    document.querySelector(selector).classList.add('active');
   },
 
   renderAllTodos: async function() {
     const todos = await todoManager.getTodos();
 
+    this.renderSidebar(todos);
     this.renderTodos(todos, 'All Todos');
   },
 
-  renderAllByDate: async function(date) {
+  renderAllByDate: async function(date, target) {
     const todos = await todoManager.getTodos();
     const grouped = this.groupTodos(todos);
 
+    this.renderSidebar(todos);
     this.renderTodos(grouped[date], date);
   },
 
@@ -189,15 +192,42 @@ const viewManager = {
     const todos = await todoManager.getTodos();
     const completed = this.getCompletedTodos(todos);
 
+    this.renderSidebar(todos);
     this.renderTodos(completed, 'Completed');
   },
 
-  renderCompletedByDate: async function(date) {
+  renderCompletedByDate: async function(date, target) {
     const todos = await todoManager.getTodos();
     const completed = this.getCompletedTodos(todos);
     const grouped = this.groupTodos(completed);
 
+    this.renderSidebar(todos);
     this.renderTodos(grouped[date], `Completed - ${date}`);
+  },
+
+  highlightSidebar: function() {
+    if (this.currentlyRendering === 'all' && this.currentlyRenderingDate) {
+      $(
+        `#all_lists > dl[data-title="${this.currentlyRenderingDate}"]`
+      ).addClass('active');
+    } else if (
+      this.currentlyRendering === 'completed' &&
+      this.currentlyRenderingDate
+    ) {
+      $(
+        `#completed_lists > dl[data-title="${this.currentlyRenderingDate}"]`
+      ).addClass('active');
+    } else if (this.currentlyRendering === 'completed') {
+      $('#all_done_header').addClass('active');
+    } else {
+      $('#all_header').addClass('active');
+    }
+  },
+
+  renderSidebar: function(todos) {
+    this.renderAllTodosList(todos);
+    this.renderCompletedTodosList(todos);
+    this.highlightSidebar();
   },
 
   renderHeader: function(title, data) {
@@ -209,8 +239,7 @@ const viewManager = {
     $('#items > header').append(html);
   },
 
-  renderAllTodosList: async function() {
-    const todos = await todoManager.getTodos();
+  renderAllTodosList: function(todos) {
     const headerHtml = viewManager.templates.all_todos_template({
       todos
     });
@@ -225,8 +254,7 @@ const viewManager = {
     $('#all_lists').append(listHtml);
   },
 
-  renderCompletedTodosList: async function() {
-    const todos = await todoManager.getTodos();
+  renderCompletedTodosList: function(todos) {
     const completed = this.getCompletedTodos(todos);
     const todosByDate = this.groupTodos(completed);
     const headerHtml = viewManager.templates.completed_todos_template({
@@ -430,7 +458,7 @@ const todoManager = {
 
     viewManager.currentlyRendering = 'all';
     viewManager.currentlyRenderingDate = date;
-    viewManager.renderAllByDate(date);
+    viewManager.renderAllByDate(date, e.currentTarget);
   },
 
   handleRenderCompletedByDate: function(e) {
@@ -438,7 +466,7 @@ const todoManager = {
 
     viewManager.currentlyRendering = 'completed';
     viewManager.currentlyRenderingDate = date;
-    viewManager.renderCompletedByDate(date);
+    viewManager.renderCompletedByDate(date, e.currentTarget);
   },
 
   handleKeyPress: function(e) {
